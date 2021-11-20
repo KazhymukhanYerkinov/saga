@@ -1,4 +1,5 @@
 import { useSelector, useDispatch } from 'react-redux';
+import { Link } from 'react-router-dom';
 
 
 function App() {
@@ -10,9 +11,11 @@ function App() {
 
   return (
     <div>
-      <button onClick = {() => dispatch({ type: 'LOAD_DATA' })}>
-        click me
-      </button>
+      <div>
+        <Link to = '/blog'>
+          open blog
+        </Link>
+      </div>
     </div>
   );
 }

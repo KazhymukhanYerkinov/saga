@@ -1,5 +1,6 @@
-import { takeEvery, put, call, select } from 'redux-saga/effects';
-
+import { all, call, spawn, take, fork, cancel } from 'redux-saga/effects';
+import loadBasicData from './initialSagas';
+import pageLoaderSaga from './pageLoaderSaga';
 
 // take - вызывает только один раз
 // takeEvery - вызывает каждый раз
@@ -10,36 +11,46 @@ import { takeEvery, put, call, select } from 'redux-saga/effects';
 // join - он блокирует фунции, и ждет сага функцую
 // select - с помощи этой функии, мы можем брать state из store-a
 
-async function swapiGet(pattern) {
-  const request = await fetch(`http://swapi.dev/api/${pattern}`);
 
-  const data = await request.json();
+export function* fetchPlanets(signal) {
+  console.log('LOAD_SOME_DATA starts');
 
-  return data;
+  const response = yield call(fetch, 'https://swapi.dev/api/planets', {signal});
+  const data = yield call([response, response.json]);
+
+  console.log('LOAD_SOME_DATA completed', data);
 }
+export function* loadOnAction() {
+  let task;
+  let abortController = new AbortController();
 
-export function* loadPeople() {
-  const people = yield call(swapiGet, 'people');
-  yield put({ type: 'SET_PEOPLE', payload: people.results });
-  return people;
-}
-export function* loadPlanets() {
-  const planets = yield call(swapiGet, 'planets');
-  yield put({ type: 'SET_PLANETS', payload: planets.results });
-}
-export function* workerSaga() {
-  yield call(loadPeople);
-  yield call(loadPlanets);
-
-  const store = yield select(s => s);
-  console.log('finish parallel tasks', store);
-}
-
-
-export function* watchClickSaga() {
-  yield takeEvery('LOAD_DATA', workerSaga);
+  while(true) {
+    yield take('LOAD_SOME_DATA');
+    
+    if (task) {
+      abortController.abort();
+      yield cancel(task);
+      abortController = new AbortController();
+    }
+    task = yield fork(fetchPlanets, abortController.signal);
+  }
 }
 
 export default function* rootSaga() {
-  yield watchClickSaga();
+  const sagas = [loadBasicData, pageLoaderSaga, loadOnAction];
+
+  const retrySagas = yield sagas.map(saga => {
+    return spawn(function* () {
+      while(true) {
+        try {
+          yield call(saga);
+          break;
+        } catch (e) {
+          console.log(e);
+        }
+
+      }
+    })
+  });
+  yield all(retrySagas);
 }
